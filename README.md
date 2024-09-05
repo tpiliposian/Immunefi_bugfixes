@@ -15,6 +15,7 @@ Bounty: $505,000 in RAY tokens
 Raydium is an AMM with an integrated central order book system. Users can provide liquidity, perform swaps on the exchange, and stake the RAY token for additional yield.
 A fundamental aspect of Raydium is the Concentrated Liquidity Market Maker (CLMM).
 
+The vulnerability was located within the [increase_liquidity](Raydium/increase_liquidity.rs) file of the Raydium protocol. It conducts several critical operations, including pool status validation, token amount calculations based on user-provided maximums, fee updates, and the actual increase of liquidity in the position’s state.
 
 
 ## References
