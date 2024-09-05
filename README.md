@@ -2,6 +2,21 @@
 
 This repository documents research on critical bug fixes identified on Immunefi in 2023-2024, highlighting how these vulnerabilities were exploited, their impact on projects, and the subsequent fixes implemented. The goal is to provide insights into common pitfalls, remediation strategies, and lessons learned from real-world bug bounty reports.
 
+# 1. Raydium - Tick Manipulation
+
+Reported by: @riproprip
+
+Protocol: Raydium
+
+Date: January 10, 2024
+
+Bounty: $505,000 in RAY tokens
+
+Raydium is an AMM with an integrated central order book system. Users can provide liquidity, perform swaps on the exchange, and stake the RAY token for additional yield.
+A fundamental aspect of Raydium is the Concentrated Liquidity Market Maker (CLMM).
+
+
+
 ## References
 
 [1]. https://medium.com/immunefi/raydium-tick-manipulation-bugfix-review-c6aae4527ed6
