@@ -17,6 +17,55 @@ A fundamental aspect of Raydium is the Concentrated Liquidity Market Maker (CLMM
 
 The vulnerability was located within the [increase_liquidity](Raydium/increase_liquidity.rs) file of the Raydium protocol. It conducts several critical operations, including pool status validation, token amount calculations based on user-provided maximums, fee updates, and the actual increase of liquidity in the position’s state.
 
+# 2. Yield Protocol - Logic Error
+
+Reported by: @riproprip
+
+Protocol: Raydium
+
+Date: January 10, 2024
+
+Bounty: $505,000 in RAY tokens
+
+# 3. Silo Finance - Logic Error
+
+Reported by: @riproprip
+
+Protocol: Raydium
+
+Date: January 10, 2024
+
+Bounty: $505,000 in RAY tokens
+
+# 4. DFX Finance - Rounding Error
+
+Reported by: @riproprip
+
+Protocol: Raydium
+
+Date: January 10, 2024
+
+Bounty: $505,000 in RAY tokens
+
+# 5. Enzyme Finance - Missing Privilege Check
+
+Reported by: @riproprip
+
+Protocol: Raydium
+
+Date: January 10, 2024
+
+Bounty: $505,000 in RAY tokens
+
+# 6. Moonbeam, Astar, And Acala - Library Truncation
+
+Reported by: @riproprip
+
+Protocol: Raydium
+
+Date: January 10, 2024
+
+Bounty: $505,000 in RAY tokens
 
 ## References
 
