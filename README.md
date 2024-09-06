@@ -97,7 +97,7 @@ Bounty: $95,000 USDC
 
 ### TL;DR
 
-
+The vulnerability in the Yield Protocol's strategy contract arises from the `burn()` function, which calculates the LP tokens to return to the user based on the current balance of LP tokens in the contract (`pool.balanceOf(address(this))`). An attacker can inflate this balance by sending extra LP tokens to the contract before calling burn, allowing them to withdraw more tokens than they originally deposited, effectively stealing from the protocol.
 
 ### Vulnerability Analysis
 
@@ -211,6 +211,16 @@ Logs:
   holder base token amount after transactions: 1.011096784340278200659569e24
 
 Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.61s (6.15s CPU time)
+```
+
+### Vulnerability Fix
+
+In the patch, the project team modified the `burn()` function in the strategy contract to use `poolCached_` instead of `pool.balanceOf(address(this))` to determine the number of LP tokens that should be transferred to the caller, fixing the issue.
+
+The new formula would be:
+
+```solidity
+poolTokensObtained = poolCached_ * burnt / totalSupply_;
 ```
 
 # 3. Silo Finance - Logic Error
