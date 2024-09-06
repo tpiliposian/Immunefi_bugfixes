@@ -255,6 +255,162 @@ Date: Mar 28, 2023
 
 Bounty: $400,000
 
+### TL;DR
+
+
+
+### Vulnerability Analysis
+
+Enzyme Finance is a decentralized asset management platform built on Ethereum. It enables anyone to create, manage, and invest in custom investment strategies using a variety of different assets, including cryptocurrencies and other digital assets.
+
+Enzyme makes use of the Gas Station Network (GSN) to allow gasless clients to interact with Ethereum smart contracts without users needing ETH for transaction fees.
+
+### An introduction to GSN
+
+The GSN is a decentralized network of relayers that allows dApps to pay the costs of transactions instead of individual users. This can lower the barrier of entry for users and increase user experience by allowing users to make gasless transactions. 
+
+The GSN makes use of `meta-transactions`. `Meta-transactions` are a design pattern in which users sign messages containing information about a transaction they would like to execute, but relayers are responsible for signing the Ethereum transaction, sending it to the network, and paying the gas cost.
+
+Enzyme has a set of contracts that support the use of the GSN. This consists of `GasRelayPaymasterLib`, `GasRelayPaymasterFactory`, and `GasRelayRecipientMixin`. The `GasRelayPaymasterFactory` helps create instances of paymasters, and the `GasRelayRecipientMixin` has shared logic that is inherited for `relayable` transactions. The `GasRelayPaymasterLib` is responsible for providing the logic for paymasters, and importantly, the rules for calls that can be relayed. The paymaster is intended to validate that the forwarder is approved by the paymaster as well as by the recipient contract in `preRelayedCall()` function:
+
+```solidity
+    function preRelayedCall(
+        GsnTypes.RelayRequest calldata relayRequest,
+        bytes calldata signature,
+        bytes calldata approvalData,
+        uint256 maxPossibleGas
+    )
+    external
+    override
+    returns (bytes memory, bool) {
+        _verifyRelayHubOnly();
+        _verifyForwarder(relayRequest);
+        _verifyValue(relayRequest);
+        _verifyPaymasterData(relayRequest);
+        _verifyApprovalData(approvalData);
+        return _preRelayedCall(relayRequest, signature, approvalData, maxPossibleGas);
+    }
+```
+
+However, within Enzyme’s `GasRelayPaymasterLib` contract, the external function which contained the check for a valid forwarder was overridden:
+
+```solidity
+    /// @notice Checks whether the paymaster will pay for a given relayed tx
+    /// @param _relayRequest The full relay request structure
+    /// @return context_ The tx signer and the fn sig, encoded so that it can be passed to `postRelayCall`
+    /// @return rejectOnRecipientRevert_ Always false
+    function preRelayedCall(
+        IGsnTypes.RelayRequest calldata _relayRequest,
+        bytes calldata,
+        bytes calldata,
+        uint256
+    )
+        external
+        override
+        relayHubOnly
+        returns (bytes memory context_, bool rejectOnRecipientRevert_)
+    {
+        address vaultProxy = getParentVault();
+        require(
+            IVault(vaultProxy).canRelayCalls(_relayRequest.request.from),
+            "preRelayedCall: Unauthorized caller"
+        );
+
+        bytes4 selector = __parseTxDataFunctionSelector(_relayRequest.request.data);
+        require(
+            __isAllowedCall(
+                vaultProxy,
+                _relayRequest.request.to,
+                selector,
+                _relayRequest.request.data
+            ),
+            "preRelayedCall: Function call not permitted"
+        );
+
+        return (abi.encode(_relayRequest.request.from, selector), false);
+    }
+```
+
+When a relayed transaction is sent via GSN in a typical flow, the trusted forwarder is being relied on to perform an important security check, verifying the user’s signature when a transaction is relayed. Since a malicious trusted forwarder can be provided due to missing verification of the provided forwarder’s address in the paymaster, the signature verification can be bypassed, and a relay call can be crafted in such a way that the paymaster returns much more fees than expected since the `from` address is believed to be the address which matches the signature provided. An attacker would craft the following parameters of `relayCall` to exploit the missing validation after deploying a malicious forwarder:
+
+```js
+const relayRequest = {
+      from: VaultOwnerAddr, // Address to emulate (signature not verified)
+      to: ComptrollerProxyAddr, // Bypass checks in preRelayedCall()
+      value: 0,
+      gas: ...,
+      nonce: ...,
+      data: '0x39bf70d1', // 0x39bf70d1 == callOnExtension()
+      validUntil: ...,
+};
+
+const relayData = {
+      gasPrice: ...,
+      pctRelayFee: 1000, // 1000% fee to be returned to relay worker
+      baseRelayFee: 0, // Base fee can be used to manipulate returned funds
+      relayWorker: RelayWorkerAddr, // Attacker relay worker
+      paymaster: PaymasterAddr, // Enzyme controlled paymaster
+      forwarder: ExploitForwarder.address, // Attacker malicious forwarder
+      paymasterData: true, // top up the paymaster if not enough funds
+      clientId: ...,
+};
+
+let tx = await RelayHub.connect(impersonatedSigner)
+      .relayCall(defaultMaxAcceptance,
+            {
+                   request: relayRequest,
+                   relayData: relayData
+            },
+            requestSignature,
+            approvalData,
+            externalGasLimit,
+      );
+```
+
+The most relevant changes to the relay data are the `forwarder`, which is set to the malicious forwarder deployed by the attacker, and the `pctRelayFee` and `baseRelayFee` which can be used to manipulate the amount of funds returned to the relayWorker by the paymaster.
+
+### Vulnerability Fix
+
+To address this issue, Enzyme introduced the following [commit](https://github.com/enzymefinance/protocol/commit/e813a20f36565feffb0f07993a730505c7949830) to add the required check within the GasRelayPaymasterLib, which verifies if the passed address is a trusted forwarder and reverts otherwise.
+
+```diff
+    function preRelayedCall(
+        IGsnTypes.RelayRequest calldata _relayRequest,
+        bytes calldata,
+        bytes calldata,
+        uint256
+    )
+        external
+        override
+        relayHubOnly
+        returns (bytes memory context_, bool rejectOnRecipientRevert_)
+    {
++       require(
++           _relayRequest.relayData.forwarder == TRUSTED_FORWARDER,
++           "preRelayedCall: Unauthorized forwarder"
++       );
+
+        address vaultProxy = getParentVault();
+        require(
+            IVault(vaultProxy).canRelayCalls(_relayRequest.request.from),
+            "preRelayedCall: Unauthorized caller"
+        );
+
+        bytes4 selector = __parseTxDataFunctionSelector(_relayRequest.request.data);
+        require(
+            __isAllowedCall(
+                vaultProxy,
+                _relayRequest.request.to,
+                selector,
+                _relayRequest.request.data
+            ),
+            "preRelayedCall: Function call not permitted"
+        );
+
+        return (abi.encode(_relayRequest.request.from, selector), false);
+    }
+```
+
 # 6. Moonbeam, Astar, And Acala - Library Truncation
 
 Reported by: @pwning.eth
