@@ -257,7 +257,7 @@ Bounty: $400,000
 
 ### TL;DR
 
-
+Enzyme Finance's use of the Gas Station Network had a vulnerability in their `preRelayedCall()` function due to missing validation of the forwarder address. Attackers could exploit this by using a malicious forwarder to relay transactions and manipulate fees, allowing them to drain funds from the paymaster. The fix added a check to ensure only trusted forwarders are used, preventing unauthorized fee manipulation and protecting the system from exploitation.
 
 ### Vulnerability Analysis
 
