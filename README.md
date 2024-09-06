@@ -148,6 +148,8 @@ The attacker has control over `pool.balanceOf(address(this))`, which allows them
 
 As the pool tokens remain within the Strategy contract, the attacker making the call can mint the share tokens and then burn them back to retrieve the pool tokens that were utilized to inflate the calculation.
 
+This is done by the call to `mint()` function to get the strategy share tokens then the call to `burn()` function again to get back the LP tokens that were transferred.
+
 ### PoC:
 
 - Clone the Immunefi bugfix review repository: `git clone https://github.com/immunefi-team/bugfix-reviews-pocs.git`
