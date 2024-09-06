@@ -19,53 +19,53 @@ The vulnerability was located within the [increase_liquidity](Raydium/increase_l
 
 # 2. Yield Protocol - Logic Error
 
-Reported by: @riproprip
+Reported by: @Paludo0x
 
-Protocol: Raydium
+Protocol: Yield
 
-Date: January 10, 2024
+Date: April 28th, 2023
 
-Bounty: $505,000 in RAY tokens
+Bounty: $95,000 USDC
 
 # 3. Silo Finance - Logic Error
 
-Reported by: @riproprip
+Reported by: @kankodu
 
-Protocol: Raydium
+Protocol: Silo Finance
 
-Date: January 10, 2024
+Date: April 28th, 2023
 
-Bounty: $505,000 in RAY tokens
+Bounty: $100,000 USDC
 
 # 4. DFX Finance - Rounding Error
 
-Reported by: @riproprip
+Reported by: @perseverance
 
-Protocol: Raydium
+Protocol: DFX Finance
 
-Date: January 10, 2024
+Date: April 28, 2023
 
-Bounty: $505,000 in RAY tokens
+Bounty: $100,000 USDT
 
 # 5. Enzyme Finance - Missing Privilege Check
 
-Reported by: @riproprip
+Reported by: @rootrescue
 
-Protocol: Raydium
+Protocol: Enzyme Finance
 
-Date: January 10, 2024
+Date: Mar 28, 2023
 
-Bounty: $505,000 in RAY tokens
+Bounty: $400,000
 
 # 6. Moonbeam, Astar, And Acala - Library Truncation
 
-Reported by: @riproprip
+Reported by: @pwning.eth
 
-Protocol: Raydium
+Protocol: Moonbeam
 
-Date: January 10, 2024
+Date: June 27th, 2023
 
-Bounty: $505,000 in RAY tokens
+Bounty: $1,000,000
 
 ## References
 
