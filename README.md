@@ -12,10 +12,13 @@ Date: January 10, 2024
 
 Bounty: $505,000 in RAY tokens
 
+### TL;DR
+
+The vulnerability in Raydium's `increase_liquidity` function allowed attackers to manipulate liquidity at arbitrary price points by exploiting the `tickarray_bitmap_extension`. The function failed to verify if the account used for this extension was correct, letting attackers misuse it to "flip" tick statuses and perform unauthorized liquidity operations. This manipulation could significantly impact the pool's integrity and lead to financial loss. The fix involved adding a validation step to ensure the correct `TickArrayBitmapExtension` account is used, preventing these unauthorized actions.
+
 ### Vulnerability Analysis
 
-Raydium is an AMM with an integrated central order book system. Users can provide liquidity, perform swaps on the exchange, and stake the RAY token for additional yield.
-A fundamental aspect of Raydium is the Concentrated Liquidity Market Maker (CLMM).
+Raydium is an AMM with an integrated central order book system. Users can provide liquidity, perform swaps on the exchange, and stake the RAY token for additional yield. A fundamental aspect of Raydium is the Concentrated Liquidity Market Maker (CLMM).
 
 The vulnerability was located within the [increase_liquidity](Raydium/increase_liquidity.rs) file of the Raydium protocol. It conducts several critical operations, including pool status validation, token amount calculations based on user-provided maximums, fee updates, and the actual increase of liquidity in the position’s state.
 
@@ -35,8 +38,7 @@ if use_tickarray_bitmap_extension {
 }
 ```
 
-The `tickarray_bitmap_extension` is crucial in managing the pool’s pricing at extreme boundaries (very high or low prices). It also acts as an extended index to manage a larger range of price ticks which helps track which ticks have been initialized (i.e., have non-zero liquidity) beyond the default capacity of the system.
-The conditional logic decides whether an account from `remaining_accounts` is needed for the operation. This account is presumably related to handling the tick array bitmap extension. This function is designed to increase liquidity in a specific position within a liquidity pool using the remaining_accounts vector.
+The `tickarray_bitmap_extension` is crucial in managing the pool’s pricing at extreme boundaries (very high or low prices). It also acts as an extended index to manage a larger range of price ticks which helps track which ticks have been initialized (i.e., have non-zero liquidity) beyond the default capacity of the system. The conditional logic decides whether an account from `remaining_accounts` is needed for the operation. This account is presumably related to handling the tick array bitmap extension. This function is designed to increase liquidity in a specific position within a liquidity pool using the remaining_accounts vector.
 
 `remaining_accounts` is a vector containing all accounts passed into the instruction but not declared in the Accounts struct. This is useful when you want your function to handle a variable amount of accounts, e.g. when initializing a game with a variable number of players.
 
