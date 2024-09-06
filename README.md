@@ -80,7 +80,7 @@ if use_tickarray_bitmap_extension {
 }
 ```
 
-This fix introduces a validation step to confirm that the `remaining_accounts[0]` is the correct `TickArrayBitmapExtension` account associated with the pool’s current state.
+This [fix](https://github.com/raydium-io/raydium-clmm/commit/83b5a471f2323fcac3848addab725b95e09ddeb8?source=post_page-----c6aae4527ed6--------------------------------) introduces a validation step to confirm that the `remaining_accounts[0]` is the correct `TickArrayBitmapExtension` account associated with the pool’s current state.
 This ensures the proper handling of liquidity operations involving extreme price boundaries, thereby preventing the exploitation of this vulnerability in the future.
 
 # 2. Yield Protocol - Logic Error
