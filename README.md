@@ -265,11 +265,23 @@ Enzyme Finance is a decentralized asset management platform built on Ethereum. I
 
 Enzyme makes use of the Gas Station Network (GSN) to allow gasless clients to interact with Ethereum smart contracts without users needing ETH for transaction fees.
 
-### An introduction to GSN
+### GSN
 
 The GSN is a decentralized network of relayers that allows dApps to pay the costs of transactions instead of individual users. This can lower the barrier of entry for users and increase user experience by allowing users to make gasless transactions. 
 
 The GSN makes use of `meta-transactions`. `Meta-transactions` are a design pattern in which users sign messages containing information about a transaction they would like to execute, but relayers are responsible for signing the Ethereum transaction, sending it to the network, and paying the gas cost.
+
+The flow of meta-transactions is as follows:
+
+1. The user sends a signed message to the relay server containing transaction details.
+2. The relay server verifies the transaction and ensures that there are sufficient fees to cover the costs.
+3. The relay server generates a new transaction that uses the user’s signed message, trusted forwarder’s address, and paymaster’s address to call the relay hub.
+4. The relay server signs the new transaction and sends it to the Ethereum network, paying the necessary gas fees in advance.
+5. After receiving the transaction, the relay hub calls the trusted forwarder contract with the user’s signed message and then calls the recipient contract.
+6. The trusted forwarder validates the user’s signature, recovers the user’s address, and transmits the transaction to the recipient contract.
+7. The transaction is executed and the blockchain state is updated by the recipient contract.
+8. Following the completion of the transaction, the relay hub requests reimbursement from the paymaster contract for the relay server’s gas fees.
+9. The paymaster contract validates the transaction and sends funds (in tokens or ETH) to the relay server to cover the gas fees and any additional service fees.
 
 Enzyme has a set of contracts that support the use of the GSN. This consists of `GasRelayPaymasterLib`, `GasRelayPaymasterFactory`, and `GasRelayRecipientMixin`. The `GasRelayPaymasterFactory` helps create instances of paymasters, and the `GasRelayRecipientMixin` has shared logic that is inherited for `relayable` transactions. The `GasRelayPaymasterLib` is responsible for providing the logic for paymasters, and importantly, the rules for calls that can be relayed. The paymaster is intended to validate that the forwarder is approved by the paymaster as well as by the recipient contract in `preRelayedCall()` function:
 
