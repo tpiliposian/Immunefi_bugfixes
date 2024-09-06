@@ -17,6 +17,24 @@ A fundamental aspect of Raydium is the Concentrated Liquidity Market Maker (CLMM
 
 The vulnerability was located within the [increase_liquidity](Raydium/increase_liquidity.rs) file of the Raydium protocol. It conducts several critical operations, including pool status validation, token amount calculations based on user-provided maximums, fee updates, and the actual increase of liquidity in the position’s state.
 
+Ticks represent discrete price points in a CLMM. By defining a range with tick_lower and tick_upper, an LP specifies the boundaries within which their liquidity will be active.
+
+The flaw was specifically in the conditional handling of the [tickarray_bitmap_extension](https://github.com/tpiliposian/Immunefi_bugfixes/blob/bde6c3486e58d91fff972cbdb12b8c4d56f2327f/Raydium/increase_liquidity.rs#L291):
+
+```rust
+let use_tickarray_bitmap_extension = pool_state.is_overflow_default_tickarray_bitmap(vec![tick_lower, tick_upper]);
+
+[...]
+
+if use_tickarray_bitmap_extension {
+    Some(&remaining_accounts[0])
+} else {
+    None
+}
+```
+
+
+
 # 2. Yield Protocol - Logic Error
 
 Reported by: @Paludo0x
