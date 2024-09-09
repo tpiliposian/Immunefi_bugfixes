@@ -235,6 +235,87 @@ Date: April 28th, 2023
 
 Bounty: $100,000 USDC
 
+### TL;DR
+
+
+
+### Vulnerability Analysis
+
+The whitehat reported the vulnerability in the [Base](https://github.com/silo-finance/silo-core-v1/blob/master/contracts/BaseSilo.sol) Silo contract which is responsible for handling the core logic of the lending protocol. The Silo contract is a lending protocol which allows users to deposit collateral asset tokens to the contract by calling the `deposit()` function of the contract. In return, the contract mints the share of tokens to the depositor based on the deposited amount and the total supply of the share and updates the storage state `_assetStorage[_asset]` with the deposited amount:
+
+```solidity
+       AssetStorage storage _state = _assetStorage[_asset];
+
+
+       collateralAmount = _amount;
+
+
+       uint256 totalDepositsCached = _collateralOnly ? _state.collateralOnlyDeposits : _state.totalDeposits;
+
+
+       if (_collateralOnly) {
+           collateralShare = _amount.toShare(totalDepositsCached, _state.collateralOnlyToken.totalSupply());
+           _state.collateralOnlyDeposits = totalDepositsCached + _amount;
+           _state.collateralOnlyToken.mint(_depositor, collateralShare);
+       } else {
+           collateralShare = _amount.toShare(totalDepositsCached, _state.collateralToken.totalSupply());
+           _state.totalDeposits = totalDepositsCached + _amount;
+           _state.collateralToken.mint(_depositor, collateralShare);
+       }
+```
+The users who deposit the collateral in the contract can borrow other assets from the protocol by using the `borrow()` function, which updates the accrued interest rate of the borrowing asset first and then checks to see if the current contract has enough tokens for the user to borrow. Then, the function transfers the tokens to the user and checks the loan-to-value (LTV) ratio based on the collateral provided.
+
+```solidity
+   function _borrow(address _asset, address _borrower, address _receiver, uint256 _amount)
+       internal
+       nonReentrant
+       returns (uint256 debtAmount, uint256 debtShare)
+   {
+       // MUST BE CALLED AS FIRST METHOD!
+       _accrueInterest(_asset);
+
+
+       if (!borrowPossible(_asset, _borrower)) revert BorrowNotPossible();
+
+
+       if (liquidity(_asset) < _amount) revert NotEnoughLiquidity();
+
+   /// @inheritdoc IBaseSilo
+   function liquidity(address _asset) public view returns (uint256) {
+       return ERC20(_asset).balanceOf(address(this)) - _assetStorage[_asset].collateralOnlyDeposits;
+   }
+```
+
+On a high level, the vulnerability allows an attacker to manipulate the utilization rate of an asset that had zero total deposit to the contract. An attacker can manipulate the utilization rate by donating an ERC20 asset to the contract, and if the attacker had the majority of the shares in the market for that particular asset, borrowing the donated token would inflate the utilization rate of that particular asset. In general, the steps to reproduce this attack:
+
+1. Determine a market that had 0 total deposits for one of the assets in the market. For example, WETH had 0 total deposits.
+2. Become the majority shareholder for that particular asset by depositing WETH to that market, which will make the `totalDeposits` for that asset non-zero.
+3. Donate additional WETH to the market, which will allow other users to borrow more WETH than the total deposited WETH, on step 2.
+4. Use another user/address to deposit another asset in the market, to borrow the donated WETH.
+5. In the next block, if `accrueInterest()` is called, the utilization rate of the attacker's initial deposited amount will be over 100%, which will increase the interest rate to an extremely high value.
+6. Because of this inflated interest rate, the attacker’s initial deposit is valued more than it should be, and it allows the attacker to borrow most of the funds in the market.
+
+```solidity
+   /// @inheritdoc IBaseSilo
+   function liquidity(address _asset) public view returns (uint256) {
+       return ERC20(_asset).balanceOf(address(this)) - _assetStorage[_asset].collateralOnlyDeposits;
+   }
+```
+
+### PoC
+
+The steps to use this POC is as follows:
+
+
+1. Install https://github.com/foundry-rs/foundry
+2. Replace `Counter.sol` with [BugFixReview.sol](SiloFinance/BugFixReview.sol)
+3. Replace `Counter.t.sol` with [BugFixReview.t.sol](SiloFinance/BugFixReview.t.sol)
+4. Run `forge test — match-path test/BugFixReview.t.sol -vvv`
+
+This POC will make a local fork on 17139470 and 17139471 and will try to manipulate the interest rate on the first block before stealing funds on the second block. Since the attack occurs over two blocks, we can’t use a flashloan to demonstrate the attack.
+
+What we can do instead is to use deal from Forge to manipulate the attacker contract balance.
+
 # 4. DFX Finance - Rounding Error
 
 Reported by: @perseverance
@@ -244,6 +325,12 @@ Protocol: DFX Finance
 Date: April 28, 2023
 
 Bounty: $100,000 USDT
+
+### TL;DR
+
+
+
+### Vulnerability Analysis
 
 # 5. Enzyme Finance - Missing Privilege Check
 
