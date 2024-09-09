@@ -316,6 +316,28 @@ This POC will make a local fork on 17139470 and 17139471 and will try to manipul
 
 What we can do instead is to use deal from Forge to manipulate the attacker contract balance.
 
+### Vulnerability Fix
+
+The project temporarily fixed the vulnerable market after the report was submitted, and after the proper fix is ready, the code is deployed to the mainnet.
+
+The first mitigation that the project implemented was to deposit an asset to the market that had 0 total deposits in the market, which can be seen in this transaction.
+
+However, this deposit only mitigated the vulnerable market temporarily. For the permanent fix, the project implemented a cap in the utilization rate calculation and limited the maximum compounded interest rate to 10k % APR. The former one is to make sure that the utilization rate never exceeds 100% of utilization rate. And the latter is to stop producing yield after compounded interest passes 10%, unless `accrueInterest()` is being called.
+
+To make sure the fixes that the project implemented are secure and didn’t leave any edge cases, the code went through formal verification from Certora, with added rules that cover this vulnerability. Those rules are:
+
+
+`cantExceedMaxUtilization` and `interestNotMoreThenMax`.
+
+- `cantExceedMaxUtilization` is an invariant that guarantees that the utilization rate never exceeds 100%. This means that no one can borrow more than the deposited amount.
+- `interestNotMoreThenMax` tests the fixes to make sure that the interest rate cannot exceed the max limit.
+
+The details for both of these rules/specs were already published by the project, which you can access in their [Github](https://github.com/silo-finance/silo-core-v1/blob/e5d16f201ab2139829d45ed881532c936249d3a5/certora/specs/interest-rate-model/CertoraInterestRate.spec#L4-L46).
+
+The permanent fix can be seen at [this address](https://etherscan.io/address/0x76074C0b66A480F7bc6AbDaA9643a7dc99e18314#code).
+
+For further information regarding the fixes that Silo Finance and Certora made to fix this vulnerability, you can read [here](https://medium.com/silo-protocol/vulnerability-disclosure-2023-06-06-c1dfd4c4dbb8) and [here](https://medium.com/certora/silo-finance-post-mortem-3b690fffeb08).
+
 # 4. DFX Finance - Rounding Error
 
 Reported by: @perseverance
@@ -331,6 +353,8 @@ Bounty: $100,000 USDT
 
 
 ### Vulnerability Analysis
+
+
 
 # 5. Enzyme Finance - Missing Privilege Check
 
