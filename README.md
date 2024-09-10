@@ -237,7 +237,7 @@ Bounty: $100,000 USDC
 
 ### TL;DR
 
-
+A vulnerability in the Base Silo contract of Silo Finance allowed attackers to manipulate the utilization rate and interest calculations by donating assets to markets with zero initial deposits. By becoming the majority shareholder and manipulating the utilization rate, attackers could inflate interest rates and borrow disproportionately high amounts of funds. The temporary fix involved depositing assets to prevent zero deposits, and the permanent fix capped utilization rates at 100% and limited maximum interest rates. Formal verification by Certora confirmed these fixes were effective against similar exploits.
 
 ### Vulnerability Analysis
 
