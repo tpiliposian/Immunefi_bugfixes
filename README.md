@@ -354,6 +354,8 @@ Bounty: $100,000 USDT
 
 ### Vulnerability Analysis
 
+DFX Finance is a decentralized foreign exchange (FX) protocol. DFX Finance creates a decentralized marketplace where users can swap non-USD stablecoins pegged to various foreign currencies, such as CADC, EUROC, XSGD, and more. These types of exchanges also typically incentivize liquidity providers to supply capital by offering yield on funds deposited. The design uses an automated market making mechanism (AMM) to allow the exchange to operate in a decentralized way. The AMM exchanges tokens according to a bonding curve, which is dynamically adjusted according to real world price feeds from Chainlink. Each currency is paired with USDC, which is treated as a bridge currency in the DFX AMM between all other stablecoins.
+
 
 
 # 5. Enzyme Finance - Missing Privilege Check
