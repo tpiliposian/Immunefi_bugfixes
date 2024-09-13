@@ -350,14 +350,98 @@ Bounty: $100,000 USDT
 
 ### TL;DR
 
-
+A vulnerability in DFX Finance’s AssimilatorV2 contract allowed users to exploit the token transfer calculation when using EURS tokens, which have fewer decimals than most tokens. By repeatedly depositing small amounts that resulted in zero tokens being transferred, attackers could still receive minted curve tokens representing pool shares. This allowed attackers to progressively take over the pool without providing corresponding liquidity. DFX Finance fixed the issue by requiring that the transferred amount is greater than zero before allowing the transaction.
 
 ### Vulnerability Analysis
 
 DFX Finance is a decentralized foreign exchange (FX) protocol. DFX Finance creates a decentralized marketplace where users can swap non-USD stablecoins pegged to various foreign currencies, such as CADC, EUROC, XSGD, and more. These types of exchanges also typically incentivize liquidity providers to supply capital by offering yield on funds deposited. The design uses an automated market making mechanism (AMM) to allow the exchange to operate in a decentralized way. The AMM exchanges tokens according to a [bonding curve](https://yos.io/2018/11/10/bonding-curves/), which is dynamically adjusted according to real world price feeds from Chainlink. Each currency is paired with USDC, which is treated as a bridge currency in the DFX AMM between all other stablecoins.
 
-Assimilators are necessary when dealing with pairs of different values, which is core to DFX protocol as all assets are paired with USDC. The [AssimilatorV2](https://github.com/dfx-finance/protocol-v2/blob/main/src/assimilators/AssimilatorV2.sol) contract is responsible for converting all amounts to a numeraire, or a base value used for computations across the protocol. DFX Finance maintains the assimilators which integrate with Curve to provide proportional liquidity to pools. When users would like to provide liquidity to a pool to receive yield on their stablecoins, they call the deposit function on the [Curve pool](DFXFinance
-/Curve.sol) and receive liquidity provider tokens in return representing their proportion of the underlying asset they deposited.
+Assimilators are necessary when dealing with pairs of different values, which is core to DFX protocol as all assets are paired with USDC. The [AssimilatorV2](https://github.com/dfx-finance/protocol-v2/blob/main/src/assimilators/AssimilatorV2.sol) contract is responsible for converting all amounts to a numeraire, or a base value used for computations across the protocol. DFX Finance maintains the assimilators which integrate with Curve to provide proportional liquidity to pools. When users would like to provide liquidity to a pool to receive yield on their stablecoins, they call the deposit function on the [Curve pool](DFXFinance/Curve.sol) and receive liquidity provider tokens in return representing their proportion of the underlying asset they deposited.
+
+When a user deposits EURS, the function checks if the deposit amount is greater than zero, and then delegates most of the logic to the library call `ProportionalLiquidity.proportionalDeposit`.
+
+Within the `proportionalDeposit()` function, the curve pool calls to the `AssimilatorV2` contract `intakeNumeraireLPRatio` to calculate the corresponding amount of euros to transfer from the user, which is calculated on line 145, based on the LP ratio passed to the function:
+
+```solidity
+// takes a numeraire amount, calculates the raw amount of eurs, transfers it in and returns the corresponding raw amount
+function intakeNumeraireLPRatio(
+    uint256 _baseWeight,
+    uint256 _minBaseAmount,
+    uint256 _maxBaseAmount,
+    uint256 _quoteWeight,
+    uint256 _minQuoteAmount,
+    uint256 _maxQuoteAmount,
+    address _addr,
+    int128 _amount
+) external override returns (uint256 amount_) {
+    uint256 _tokenBal = token.balanceOf(_addr);
+
+    if (_tokenBal <= 0) return 0;
+
+    _tokenBal = _tokenBal.mul(1e18).div(_baseWeight);
+
+    uint256 _usdcBal = usdc.balanceOf(_addr).mul(1e18).div(_quoteWeight);
+
+    // Rate is in 1e6
+    uint256 _rate = _usdcBal.mul(10**tokenDecimals).div(_tokenBal);
+
+    amount_ = (_amount.mulu(10**tokenDecimals) * 1e6) / _rate;
+        
+    if (address(token) == address(usdc)) {
+        require(amount_ >= _minQuoteAmount && amount_ <= _maxQuoteAmount, "Assimilator/LP Ratio imbalanced!");
+    } else {
+        require(amount_ >= _minBaseAmount && amount_ <= _maxBaseAmount, "Assimilator/LP Ratio imbalanced!");
+    }
+    token.safeTransferFrom(msg.sender, address(this), amount_);
+}
+```
+
+After the transfer of the deposit is handled in the `intakeNumeraireLPRatio()` function and liquidity is transferred from the user to the contract, the `proportionalDeposit()` function mints the number of LP tokens which represents the users’ share of the pool. Finally, the deposit function returns the value of deposits and shares minted:
+
+```solidity
+function proportionalDeposit(...)
+    external
+    returns (uint256 curves_, uint256[] memory)
+{
+    ...
+    require(_newShells > 0, "Proportional Liquidity/can't mint negative amount");
+    mint(curve, msg.sender, curves_ = _newShells.mulu(1e18));
+
+    return (curves_, deposits_);
+}
+```
+
+DFX Finance’s contracts contained a vulnerability that stemmed from the calculation of the transfer amount within the `AssimilatorV2` contract on [line 145](https://github.com/dfx-finance/protocol-v2/blob/main/src/assimilators/AssimilatorV2.sol#L145). The issue arises when the `_rate` exceeds the numerator value, resulting in an integer division that leads to zero tokens being transferred from the user. Despite transferring zero tokens, the user still receives curve tokens which represent their portion of the curve pool. To exploit this, an attacker would deposit a minuscule amount of tokens, causing the transferred amount to be zero while still receiving minted curve tokens in exchange for the small proportion of tokens “deposited”:
+
+```solidity
+// Rate is in 1e6
+uint256 _rate = _usdcBal.mul(10**tokenDecimals).div(_tokenBal);
+```
+Typically, tokens have at least six decimals, which limits the potential profit to an amount lower than would be spent on gas for the transaction. However, the EURS token on the Polygon network has only two decimals. By utilizing the EURS token and repeatedly depositing a small amount (around 10,000 times) within a single transaction, an attacker can generate a profit of approximately 172 EURO or 190 USDC per attack by withdrawing the minted curve tokens. At the time of submission, the vulnerable pool had a balance of $237,143 USD, which could have been stolen by an attacker progressively acquiring a larger portion of the pool through successive attacks.
+
+### PoC
+
+The Immunefi team prepared the following [PoC](DFXFinance/PoC.sol) to demonstrate the vulnerability.
+
+### Vulnerability Fix
+
+DFX Finance fixed the issue by deploying a new version of the [AssimilatorV2](https://polygonscan.com/address/0xeC1d45DD89f8Efe9dCeDF1141D8ab992fa3Dc9a1#code) contract and added a `require` statement which checks the amount to be transferred from the user is greater than zero. The existing Curve pool was migrated to using the new Assimilator.
+
+```solidity
+// takes a numeraire amount, calculates the raw amount of eurs, transfers it in and returns the corresponding raw amount
+function intakeNumeraire(int128 _amount)
+    external
+    override
+    returns (uint256 amount_)
+{
+    uint256 _rate = getRate();
+
+    amount_ = (_amount.mulu(10**tokenDecimals) * 10**oracleDecimals) / _rate;
+
+    require(amount_ > 0, "intakeNumeraire/zero-amount!");
+    token.safeTransferFrom(msg.sender, address(this), amount_);
+}
+```
 
 # 5. Enzyme Finance - Missing Privilege Check
 
