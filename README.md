@@ -354,9 +354,10 @@ Bounty: $100,000 USDT
 
 ### Vulnerability Analysis
 
-DFX Finance is a decentralized foreign exchange (FX) protocol. DFX Finance creates a decentralized marketplace where users can swap non-USD stablecoins pegged to various foreign currencies, such as CADC, EUROC, XSGD, and more. These types of exchanges also typically incentivize liquidity providers to supply capital by offering yield on funds deposited. The design uses an automated market making mechanism (AMM) to allow the exchange to operate in a decentralized way. The AMM exchanges tokens according to a bonding curve, which is dynamically adjusted according to real world price feeds from Chainlink. Each currency is paired with USDC, which is treated as a bridge currency in the DFX AMM between all other stablecoins.
+DFX Finance is a decentralized foreign exchange (FX) protocol. DFX Finance creates a decentralized marketplace where users can swap non-USD stablecoins pegged to various foreign currencies, such as CADC, EUROC, XSGD, and more. These types of exchanges also typically incentivize liquidity providers to supply capital by offering yield on funds deposited. The design uses an automated market making mechanism (AMM) to allow the exchange to operate in a decentralized way. The AMM exchanges tokens according to a [bonding curve](https://yos.io/2018/11/10/bonding-curves/), which is dynamically adjusted according to real world price feeds from Chainlink. Each currency is paired with USDC, which is treated as a bridge currency in the DFX AMM between all other stablecoins.
 
-
+Assimilators are necessary when dealing with pairs of different values, which is core to DFX protocol as all assets are paired with USDC. The [AssimilatorV2](https://github.com/dfx-finance/protocol-v2/blob/main/src/assimilators/AssimilatorV2.sol) contract is responsible for converting all amounts to a numeraire, or a base value used for computations across the protocol. DFX Finance maintains the assimilators which integrate with Curve to provide proportional liquidity to pools. When users would like to provide liquidity to a pool to receive yield on their stablecoins, they call the deposit function on the [Curve pool](DFXFinance
+/Curve.sol) and receive liquidity provider tokens in return representing their proportion of the underlying asset they deposited.
 
 # 5. Enzyme Finance - Missing Privilege Check
 
